@@ -7,7 +7,7 @@ import os
 import random
 from scipy.spatial.distance import cosine
 from dotenv import load_dotenv
-
+import refresh_token as rt
 # Load environment variables
 load_dotenv()
 
@@ -16,7 +16,6 @@ ARTIST_IDS_FILE = "../data/artist_ids.txt"
 USED_ARTIST_IDS_FILE = "../data/used_artist_ids.txt"
 BASE_URL = "https://api.spotify.com/v1"
 
-import src.refresh_token as rt
 
 # Global access token. Initialized with the token from environment variables.
 ACCESS_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
@@ -71,7 +70,7 @@ def api_request(endpoint, method="GET", params=None, access_token=None):
         print(response.text)
         response.raise_for_status()
 
-def fetch_spotify_generated_playlists(username, access_token=None):
+def fetch_spotify_generated_playlists(username, access_token=ACCESS_TOKEN):
     """
     Fetches Spotify's generated playlists (e.g., "Discover Weekly", "Daily Mix") for a specified user.
 
@@ -261,7 +260,7 @@ def get_hyper_playlist_recommendations(df, limit=10):
 
     return pd.DataFrame(playlist_recommendations)
 
-def fetch_user_playlists(username, access_token):
+def fetch_user_playlists(username, access_token= ACCESS_TOKEN):
     """
     Fetches all playlists created by a specific user on Spotify.
     
