@@ -2,6 +2,7 @@ import playlist_functions as pf
 import refresh_token as rt
 import requests
 import json
+import pandas as pd
 # Use the function like this:
 # jaden_username = '22yxmxhcofugil76dz26cbyri'
 
@@ -80,6 +81,47 @@ recommendations = pf.get_opposite_playlist_recommendations(audio_features_dfs[5]
 print(recommendations)
 
 create_playlist('aragaosm',playlist_to_recommend['name'],recommendations)
+
+
+#---------------------------
+# df = pd.read_csv('../data/corrected_artist_avg_features.csv', on_bad_lines='skip')
+# print(df)
+
+# import pandas as pd
+
+# # Define the expected number of columns
+# expected_columns = 20
+
+# # Initialize an empty DataFrame to store valid rows
+# valid_df = pd.DataFrame()
+
+# # Read the file line by line
+# with open('../data/artist_avg_features.csv', 'r') as file:
+#     # Skip the header row
+#     header = next(file).strip().split(',')
+    
+#     for line in file:
+#         # Split the line by comma
+#         values = line.strip().split(',')
+        
+#         if len(values) == expected_columns:
+#             # Convert the list of values to a DataFrame with a single row and append to valid_df
+#             values = values[:len(values)-1]
+#             row_df = pd.DataFrame([values], columns=header)
+#             valid_df = pd.concat([valid_df, row_df], ignore_index=True)
+#         else:
+#             row_df = pd.DataFrame([values], columns=header)
+#             valid_df = pd.concat([valid_df, row_df], ignore_index=True)
+
+# # Save the valid rows back to a CSV
+# valid_df.to_csv('../data/corrected_artist_avg_features.csv', index=False)
+
+
+# with open('../data/artist_avg_features.csv','r') as file: 
+#     for line in file:
+#         if len(line.split(',')) == 20:
+#             print(line.split(','))
+#             print(line.split(',')[:len(line.split(','))-1])
 
 
 # --------------------------------------

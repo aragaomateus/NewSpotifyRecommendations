@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 import numpy as np
 import time
-import base64
+import json
 import os
 import random
 from scipy.spatial.distance import cosine
@@ -21,7 +21,7 @@ BASE_URL = "https://api.spotify.com/v1"
 ACCESS_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 
 
-def api_request(endpoint, method="GET", params=None, access_token=None):
+def api_request(endpoint, method="GET", data=None, params=None, access_token=None):
     """
     Makes an authenticated request to the Spotify API.
 
@@ -42,7 +42,7 @@ def api_request(endpoint, method="GET", params=None, access_token=None):
     }
     
     print(f"Using headers: {headers}")
-    response = requests.request(method, BASE_URL + endpoint, headers=headers, params=params)
+    response = requests.request(method, BASE_URL + endpoint, headers=headers, params=params, data=data)
     
     # Check for Unauthorized error
     if response.status_code == 401:
@@ -51,22 +51,23 @@ def api_request(endpoint, method="GET", params=None, access_token=None):
         # print(f"Refreshed token after expiry: {access_token}")
         print('NEW TOKEN ISSUED')
         headers['Authorization'] = f"Bearer {access_token}"
-        response = requests.request(method, BASE_URL + endpoint, headers=headers, params=params)
+        response = requests.request(method, BASE_URL + endpoint, headers=headers, params=params, data=data)
 
         if response.status_code == 401:
             raise ValueError("Failed to refresh access token. Please check your refresh token and credentials.")
     
     # If the request is successful
-    if response.status_code == 200:
+    if response.status_code == 200 or response.status_code == 201 :
         return response.json()
     # Handle rate limiting
     elif response.status_code == 429:
         retry_after = int(response.headers.get('Retry-After', 1))
         print(f"Rate limit exceeded. Retrying in {retry_after} seconds.")
         time.sleep(retry_after)
-        return api_request(endpoint, method, params, access_token)
+        return api_request(endpoint, method,data, params, access_token)
     # For other HTTP errors
     else:
+        print('its in the else',response.status_code)
         print(response.text)
         response.raise_for_status()
 
@@ -204,6 +205,35 @@ def fetch_audio_features_for_playlists(playlists_df):
 
     return dataframes
 
+def fetch_audio_features_for_playlist(playlist_row):
+    """
+    Fetch audio features for tracks in the given playlist row.
+
+    Parameters:
+    - playlist_row: Series containing playlist details with a 'uri' column pointing to the tracks of the playlist.
+
+    Returns:
+    - DataFrame containing audio features for the playlist.
+    """
+
+    # Extracting the playlist ID from the full URI
+    playlist_id = playlist_row['uri'].split(':')[-1]
+    
+    # Constructing the endpoint to fetch tracks from the playlist
+    tracks_endpoint = f"/playlists/{playlist_id}/tracks"
+
+    tracks_data = api_request(tracks_endpoint)
+
+    if not tracks_data or 'items' not in tracks_data:
+        print(f"Couldn't fetch tracks for playlist ID: {playlist_id}. Skipping.")
+        return pd.DataFrame()
+
+    track_ids = [item['track']['id'] for item in tracks_data['items']]
+    features_list = get_audio_features_for_tracks(track_ids)
+        
+    df = pd.DataFrame(features_list)
+
+    return df
 
 def get_hyper_playlist_recommendations(df, limit=10):
     """
@@ -302,55 +332,50 @@ def fetch_user_playlists(username, access_token= ACCESS_TOKEN):
             })
 
         offset += limit
+    playlists = pd.DataFrame(playlists)
+    playlists = playlists[playlists['owner']== username]
 
-    return pd.DataFrame(playlists)
+    return playlists
 
 
-def create_hyper_playlist_from_top_playlists(playlists_df, limit=10):
-    """
-    Creates a hyper playlist based on the top playlists of a user.
+def create_playlist(username, origin, recommendations):
+    # Define your playlist details:
+    playlist_name = f"{origin} Opposite playlits"
+    playlist_description = "Generated based on opposite playlist recommendations."
+    public_setting = True
 
-    Parameters:
-    - playlists_df: DataFrame containing user's playlists.
-    - limit: Number of tracks to consider for hyper playlist generation.
+    data = {
+        "name": playlist_name,
+        "description": playlist_description,
+        "public": public_setting
+    }
 
-    Returns:
-    - Top 3 user's playlists (DataFrame).
-    - Hyper playlist (DataFrame).
-    """
-    # 1. Sort the playlists based on track count
-    sorted_playlists = playlists_df.sort_values(by="total_tracks", ascending=False)
+    endpoint = f"/users/{username}/playlists"
+    playlist_info = api_request(endpoint, method="POST", data=json.dumps(data))
+    print(playlist_info)
+    try:
+        print(f"Playlist ID: {playlist_info['id']}")
+        print("Playlist created successfully!")
+        
+    except:
+        print("Error in creating playlist.")
+        print(playlist_info)
 
-    owner_playlist= sorted_playlists[sorted_playlists['owner'] == sorted_playlists['username'] ]
-    # 2. Select the top 3 playlists
-    top_3_playlists = owner_playlist.head(3)
-    
-    all_track_ids = []
-    # 3. Sample a maximum of 60 tracks from these 3 playlists
-    for idx, row in top_3_playlists.iterrows():
-        playlist_id = row['uri'].split(':')[-1]
-        tracks_endpoint = f"/playlists/{playlist_id}/tracks"
-        tracks_data = api_request(tracks_endpoint)
+    # Endpoint to add tracks to the created playlist:
+    add_tracks_endpoint = f"/playlists/{playlist_info['id']}/tracks"
 
-        # Ensure item['track'] is not None before extracting the id
-        track_ids = []
-        for item in tracks_data['items']:
-            if item['track']:
-                track_ids.append(item['track']['id'])
+    # Prepare the data:
+    data = {
+        "uris": list(recommendations['uri'])
+    }
 
-        all_track_ids.extend(track_ids)
-    
-    # If we have more than 60 tracks, we need to sample
-    if len(all_track_ids) > 60:
-        all_track_ids = random.sample(all_track_ids, 60)
-    
-    # 4. Use these tracks to calculate audio features
-    features_df = pd.DataFrame(get_audio_features_for_tracks(all_track_ids))
-    
-    # Fetch hyper playlist of 20 songs based on these audio features
-    hyper_playlist = get_hyper_playlist_recommendations(features_df, limit).head(20)
-    
-    return top_3_playlists,hyper_playlist
+    response = api_request(add_tracks_endpoint, method="POST", data=json.dumps(data))
+
+    if 'snapshot_id' in response:
+        print("Tracks added successfully!")
+    else:
+        print("Error in adding tracks.")
+        print(response)
 
 def get_tracks_by_artist(artist_id):
     """
@@ -468,50 +493,55 @@ def load_single_artist(artist_id, USED_ARTIST_IDS_FILE='../data/used_artist_ids.
     except Exception as e:
         print(f"[ERROR] Failed to process artist {artist_id}: {e}")
 
+from scipy.spatial.distance import cosine
+
 def find_opposite(artist_ids, df, n=10):
     """
     Find n artists that are most opposite in audio features to the given artist.
     
     Args:
-    - artist_name (str): Name of the artist.
+    - artist_ids (list): List of artist ids.
     - df (DataFrame): Dataframe with average audio features.
     - n (int): Number of opposite artists to return.
     
     Returns:
     - list: A list of n artists that are most opposite to the given artist.
     """
-    df.set_index('artist_id', inplace=True)
+    
+    # Ensure 'artist_id' is the index, but only set it once
+    if df.index.name != 'artist_id':
+        df.set_index('artist_id', inplace=True)
 
     all_opposites = []
 
     for artist_id in artist_ids:
         if artist_id not in df.index:
             print(f"Artist '{artist_id}' not found in dataframe.")
-            load_single_artist(artist_id,)
+            load_single_artist(artist_id,)  # Uncomment if this function exists and is required
             continue
 
         # Get the features of the specified artist
         artist_features = df.loc[artist_id]
 
-        # Drop the specified artist from the DataFrame for comparison
-        comparison_df = df.drop(artist_id)
-
         # Scale features
-        scaled_df = (comparison_df - df.min()) / (df.max() - df.min())
+        scaled_df = (df - df.min()) / (df.max() - df.min())
         scaled_features = (artist_features - df.min()) / (df.max() - df.min())
 
         # Compute cosine distances
-        distances = scaled_df.apply(lambda x: cosine(x, scaled_features), axis=1)
+        def calculate_distance(x):
+            try:
+                return cosine(x.values, scaled_features.values)
+            except:
+                return float('inf')  # Assigning a large value for invalid rows; they won't be chosen as most opposite
+
+        distances = scaled_df.apply(calculate_distance, axis=1)
 
         # Get the top n artists with the highest cosine distance (i.e., most opposite)
-        opposites = distances.nlargest(n).index.tolist()
-
+        opposites = distances.nsmallest(n).index.tolist()
         all_opposites.append(set(opposites))
 
-    # Find intersection of opposite artists for all artist_ids
     try: 
         intersection_of_opposites = set.intersection(*all_opposites)
-        
         return list(intersection_of_opposites)
     except: 
         raise TypeError('No opposites found for intersection')
@@ -541,8 +571,6 @@ def get_opposite_playlist_recommendations(df, limit=15):
     playlist_data['distance'] = np.linalg.norm(playlist_data[features_of_interest[1:]].values - centroid.values, axis=1)
 
     # Get the track data closest to the centroid
-    print(playlist_data)
-
     sorted_data = playlist_data.sort_values(by='distance')
     center = playlist_data[playlist_data['distance'] == playlist_data['distance'].min()]
 
@@ -600,44 +628,92 @@ def get_opposite_playlist_recommendations(df, limit=15):
     return pd.DataFrame(playlist_recommendations)
 
 
-def fetch_recent_tracks(username, access_token= ACCESS_TOKEN):
-    """
-    Fetches all playlists created by a specific user on Spotify.
+# def fetch_recent_tracks(username, access_token= ACCESS_TOKEN):
+#     """
+#     Fetches all playlists created by a specific user on Spotify.
     
-    Parameters:
-    - username (str): Spotify username of the user whose playlists are to be fetched.
-    - access_token (str): OAuth token to authenticate and authorize the Spotify API request.
+#     Parameters:
+#     - username (str): Spotify username of the user whose playlists are to be fetched.
+#     - access_token (str): OAuth token to authenticate and authorize the Spotify API request.
     
-    Returns:
-    - DataFrame: A DataFrame containing details of each playlist such as name, URI, description, image URL, 
-                public status, total number of tracks, username, and owner ID.
-    """
+#     Returns:
+#     - DataFrame: A DataFrame containing details of each playlist such as name, URI, description, image URL, 
+#                 public status, total number of tracks, username, and owner ID.
+#     """
     
-    offset = 0
-    limit = 50  # Maximum number of playlists that can be retrieved in one request by Spotify API
+#     offset = 0
+#     limit = 50  # Maximum number of playlists that can be retrieved in one request by Spotify API
 
 
 
-    endpoint = f"/users/{username}/player/recently-played"
-    params = {
-        'limit': limit,
-        'offset': offset
-    }
-    playlists_data = api_request(endpoint, params=params, access_token=access_token)
-    print(playlists_data)
-    # if not playlists_data['items']:
-    #     break
+#     endpoint = f"/users/{username}/player/recently-played"
+#     params = {
+#         'limit': limit,
+#         'offset': offset
+#     }
+#     playlists_data = api_request(endpoint, params=params, access_token=access_token)
+#     print(playlists_data)
+#     # if not playlists_data['items']:
+#     #     break
 
-    # for playlist in playlists_data['items']:
-    #     playlists.append({
-    #         'name': playlist['name'],
-    #         'uri': playlist['uri'],
-    #         'description': playlist.get('description', None),
-    #         'image_url': playlist['images'][0]['url'] if playlist['images'] else None,
-    #         'public': playlist['public'],
-    #         'total_tracks': playlist['tracks']['total'],
-    #         'username': username,
-    #         'owner': playlist['owner']['id']
-    #     })
+#     # for playlist in playlists_data['items']:
+#     #     playlists.append({
+#     #         'name': playlist['name'],
+#     #         'uri': playlist['uri'],
+#     #         'description': playlist.get('description', None),
+#     #         'image_url': playlist['images'][0]['url'] if playlist['images'] else None,
+#     #         'public': playlist['public'],
+#     #         'total_tracks': playlist['tracks']['total'],
+#     #         'username': username,
+#     #         'owner': playlist['owner']['id']
+#     #     })
 
-    offset += limit
+#     offset += limit
+
+
+
+# def create_hyper_playlist_from_top_playlists(playlists_df, limit=10):
+#     """
+#     Creates a hyper playlist based on the top playlists of a user.
+
+#     Parameters:
+#     - playlists_df: DataFrame containing user's playlists.
+#     - limit: Number of tracks to consider for hyper playlist generation.
+
+#     Returns:
+#     - Top 3 user's playlists (DataFrame).
+#     - Hyper playlist (DataFrame).
+#     """
+#     # 1. Sort the playlists based on track count
+#     sorted_playlists = playlists_df.sort_values(by="total_tracks", ascending=False)
+
+#     owner_playlist= sorted_playlists[sorted_playlists['owner'] == sorted_playlists['username'] ]
+#     # 2. Select the top 3 playlists
+#     top_3_playlists = owner_playlist.head(3)
+    
+#     all_track_ids = []
+#     # 3. Sample a maximum of 60 tracks from these 3 playlists
+#     for idx, row in top_3_playlists.iterrows():
+#         playlist_id = row['uri'].split(':')[-1]
+#         tracks_endpoint = f"/playlists/{playlist_id}/tracks"
+#         tracks_data = api_request(tracks_endpoint)
+
+#         # Ensure item['track'] is not None before extracting the id
+#         track_ids = []
+#         for item in tracks_data['items']:
+#             if item['track']:
+#                 track_ids.append(item['track']['id'])
+
+#         all_track_ids.extend(track_ids)
+    
+#     # If we have more than 60 tracks, we need to sample
+#     if len(all_track_ids) > 60:
+#         all_track_ids = random.sample(all_track_ids, 60)
+    
+#     # 4. Use these tracks to calculate audio features
+#     features_df = pd.DataFrame(get_audio_features_for_tracks(all_track_ids))
+    
+#     # Fetch hyper playlist of 20 songs based on these audio features
+#     hyper_playlist = get_hyper_playlist_recommendations(features_df, limit).head(20)
+    
+#     return top_3_playlists,hyper_playlist

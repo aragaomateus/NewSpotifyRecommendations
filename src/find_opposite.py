@@ -7,31 +7,31 @@ df = pd.read_csv('../data/artist_avg_features.csv', on_bad_lines='skip')
 
 df.set_index('artist_id', inplace=True)
 
-NUM_SIMULATIONS = 1000
+NUM_SIMULATIONS = 5000
 from scipy.spatial.distance import cosine, cityblock
 
-def find_opposite(artist_name, df, n=3, weights=None, metric="euclidean"):
-    artist_features = df.loc[artist_name]
+def find_opposite(artist_id, df, n=3, weights=None, metric="euclidean"):
+    # print(artist_id)
+    artist_features = df.loc[artist_id]
+    comparison_df = df.drop(artist_id)
+
     
     # Scale features
-    scaled_df = (df - df.min()) / (df.max() - df.min())
-    scaled_features = (artist_features - df.min()) / (df.max() - df.min())
-    
-    if weights is None:
-        weights = np.ones(len(scaled_features))
+    scaled_df = (comparison_df - comparison_df.min()) / (comparison_df.max() - comparison_df.min())
+    scaled_features = (artist_features - comparison_df.min()) / (comparison_df.max() - comparison_df.min())
 
     # Compute distances using the provided metric
     if metric == "euclidean":
-        distances = np.sqrt(((scaled_df - scaled_features) ** 2 * weights).sum(axis=1))
+        distances = np.sqrt(((scaled_df - scaled_features) ** 2 ).sum(axis=1))
     elif metric == "manhattan":
-        distances = ((scaled_df - scaled_features).abs() * weights).sum(axis=1)
+        distances = ((scaled_df - scaled_features).abs()).sum(axis=1)
     elif metric == "cosine":
         distances = scaled_df.apply(lambda x: cosine(x, scaled_features), axis=1)
     else:
         raise ValueError("Unsupported metric")
     
-    opposites = distances.sort_values(ascending=False if metric != "cosine" else True).head(n).index.tolist()
-    
+    opposites = distances.sort_values(ascending=False).head(n).index.tolist()
+    # print(opposites)
     return opposites
 
 
