@@ -104,15 +104,16 @@ def fetch_spotify_generated_playlists(username, access_token=ACCESS_TOKEN):
         # Exit loop if no items are returned
         if not playlists_data['items']:
             break
-
         # Extract relevant details for playlists that match our criteria
         matching_playlists = [
             {
                 'name': playlist['name'],
                 'uri': playlist['uri'],
                 'description': playlist.get('description', None),  # Handle case where 'description' might be absent
+                'owner': playlist['owner']['display_name'],
                 'image_url': playlist['images'][0]['url'] if playlist['images'] else None  # Take the highest resolution image, if available
             }
+
             for playlist in playlists_data['items']
             if any(name in playlist['name'] for name in generated_playlists)
         ]
@@ -599,3 +600,44 @@ def get_opposite_playlist_recommendations(df, limit=15):
     return pd.DataFrame(playlist_recommendations)
 
 
+def fetch_recent_tracks(username, access_token= ACCESS_TOKEN):
+    """
+    Fetches all playlists created by a specific user on Spotify.
+    
+    Parameters:
+    - username (str): Spotify username of the user whose playlists are to be fetched.
+    - access_token (str): OAuth token to authenticate and authorize the Spotify API request.
+    
+    Returns:
+    - DataFrame: A DataFrame containing details of each playlist such as name, URI, description, image URL, 
+                public status, total number of tracks, username, and owner ID.
+    """
+    
+    offset = 0
+    limit = 50  # Maximum number of playlists that can be retrieved in one request by Spotify API
+
+
+
+    endpoint = f"/users/{username}/player/recently-played"
+    params = {
+        'limit': limit,
+        'offset': offset
+    }
+    playlists_data = api_request(endpoint, params=params, access_token=access_token)
+    print(playlists_data)
+    # if not playlists_data['items']:
+    #     break
+
+    # for playlist in playlists_data['items']:
+    #     playlists.append({
+    #         'name': playlist['name'],
+    #         'uri': playlist['uri'],
+    #         'description': playlist.get('description', None),
+    #         'image_url': playlist['images'][0]['url'] if playlist['images'] else None,
+    #         'public': playlist['public'],
+    #         'total_tracks': playlist['tracks']['total'],
+    #         'username': username,
+    #         'owner': playlist['owner']['id']
+    #     })
+
+    offset += limit
