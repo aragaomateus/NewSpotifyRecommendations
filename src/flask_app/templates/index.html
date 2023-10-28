@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beyond Recommendations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Beyond Recommendations</h1>
+    <form action="/recommendations" method="post">
+        <label for="username">Enter your username:</label>
+        <input type="text" id="username" name="username" required>
+        
+        <label for="playlist_type">Choose a playlist type:</label>
+        <select id="playlist_type" name="playlist_type">
+            <option value="m">Made for you</option>
+            <option value="p">Personal playlist</option>
+        </select>
+        
+        <input type="submit" value="Get Recommendations">
+    </form>
+</body>
+</html>
