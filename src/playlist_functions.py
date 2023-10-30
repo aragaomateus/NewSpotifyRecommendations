@@ -41,11 +41,11 @@ def api_request(endpoint, method="GET", data=None, params=None, access_token=Non
         'Authorization': f"Bearer {access_token}"
     }
     
-    print(f"Using headers: {headers}")
+    # print(f"Using headers: {headers}")
     response = requests.request(method, BASE_URL + endpoint, headers=headers, params=params, data=data)
     
     # Check for Unauthorized error
-    if response.status_code == 401:
+    if response.status_code == 401 or response.status_code == 400 :
         print("Token expired. Refreshing token and retrying.")
         access_token = rt.refresh_access_token()
         # print(f"Refreshed token after expiry: {access_token}")

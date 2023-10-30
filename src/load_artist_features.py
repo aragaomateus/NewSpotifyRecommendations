@@ -31,8 +31,13 @@ def main():
             print(f"[DEBUG] Processing artist ID: {artist_id}")
             avg_features = pf.get_avg_features_for_artist(artist_id)
             avg_features['artist_id'] = artist_id
-            avg_features_data.append(avg_features)
-            pf.save_used_artist_ids(artist_id,USED_ARTIST_IDS_FILE)
+            if len(avg_features) < 19:
+                print('skipped')
+                continue
+            else:
+                print('saving')
+                avg_features_data.append(avg_features)
+                pf.save_used_artist_ids(artist_id,USED_ARTIST_IDS_FILE)
             
             # Save data every 250 artists
             if idx % 250 == 0:
