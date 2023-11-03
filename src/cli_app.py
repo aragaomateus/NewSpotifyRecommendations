@@ -33,7 +33,13 @@ def handle_user_actions(username, playlist_type):
     playlist_to_recommend = playlists.iloc[index_to_generate]
     audio_features_df = pf.fetch_audio_features_for_playlist(playlist_to_recommend)
     
-    recommendation_type = input(f"Which type of recommendation would you like to get for {playlist_to_recommend['name']} : \n(o) - 'Opposite'\n(h) - 'Hyper focused'\noption: ")
+    while True:
+        recommendation_type = input(f"Which type of recommendation would you like to get for {playlist_to_recommend['name']} : \n(o) - 'Opposite'\n(h) - 'Hyper focused'\noption: ")
+        if recommendation_type not in ['o','h']:
+            print('type either, `o` or `h`')
+            continue
+        else:
+            break
     recommendations = get_recommendations(audio_features_df, recommendation_type)
     
     print(recommendations)
