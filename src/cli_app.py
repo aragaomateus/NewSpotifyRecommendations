@@ -1,6 +1,7 @@
 import playlist_functions as pf
 import os
 
+trista_id = '12136380690'
 def display_playlists(playlists):
     for idx, (i, playlist) in enumerate(playlists.iterrows()): 
         print("index", idx, playlist['name'], playlist['description'])
